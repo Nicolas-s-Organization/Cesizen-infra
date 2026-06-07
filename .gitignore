@@ -1,0 +1,19 @@
+# Secrets : les .env réels contiennent les credentials prod, jamais committer
+.env
+.env.staging
+.env.prod
+compose/.env.staging
+compose/.env.prod
+traefik/.env
+
+# Certificats Let's Encrypt (générés sur la VM, ne pas versionner)
+traefik/letsencrypt/
+
+# Logs / fichiers temporaires
+*.log
+*.tmp
+.DS_Store
+
+# Éditeurs / IDE
+.vscode/
+.idea/

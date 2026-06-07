@@ -1,0 +1,104 @@
+# Stack STAGING (= recette). Suit la branche develop côté code.
+#
+#   - tag d'image  : :develop (mis à jour à chaque push develop par GitHub Actions)
+#   - DB           : volume + réseau internal ISOLÉS de la prod
+#   - pgAdmin      : accès web à la DB de recette (utile pour debug, optionnel)
+#
+# Démarrage :
+#   docker compose -f compose/docker-compose.staging.yml --env-file compose/.env.staging up -d
+
+name: cesizen-staging
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cesizen-postgres-staging
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ghcr.io/nicolas-s-organization/cesizen-api:${API_TAG:-develop}
+    container_name: cesizen-api-staging
+    restart: unless-stopped
+    pull_policy: always
+    env_file: .env.staging
+    environment:
+      # DATABASE_URL est construite à partir des POSTGRES_* (évite la double saisie)
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [web, internal]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      # Route /api/* vers cette API (priorité haute pour passer avant le catch-all web)
+      - "traefik.http.routers.api-staging.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api-staging.entrypoints=websecure"
+      - "traefik.http.routers.api-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-staging.priority=100"
+      # L'API monte ses routes à la racine → on enlève le préfixe /api avant de la solliciter
+      - "traefik.http.routers.api-staging.middlewares=stripprefix-staging"
+      - "traefik.http.middlewares.stripprefix-staging.stripprefix.prefixes=/api"
+      - "traefik.http.services.api-staging.loadbalancer.server.port=3000"
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  web:
+    image: ghcr.io/nicolas-s-organization/cesizen-app-web:${WEB_TAG:-develop}
+    container_name: cesizen-web-staging
+    restart: unless-stopped
+    pull_policy: always
+    depends_on: [api]
+    networks: [web]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      # Catch-all : tout le reste du domaine → web SPA (nginx)
+      - "traefik.http.routers.web-staging.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.web-staging.entrypoints=websecure"
+      - "traefik.http.routers.web-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.web-staging.priority=1"
+      - "traefik.http.services.web-staging.loadbalancer.server.port=8080"
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Optionnel : accès web à la DB de staging. Commenter ce bloc pour le désactiver.
+  # Nécessite un sous-domaine DNS dédié (ex. cesizen-pgadmin.duckdns.org).
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: cesizen-pgadmin-staging
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    depends_on: [postgres]
+    networks: [web, internal]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.pgadmin-staging.rule=Host(`${PGADMIN_DOMAIN}`)"
+      - "traefik.http.routers.pgadmin-staging.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pgadmin-staging.loadbalancer.server.port=80"
+
+volumes:
+  postgres_data:
+
+networks:
+  web:
+    external: true
+  internal:
+    driver: bridge
+    internal: true   # la DB n'a pas d'accès Internet sortant

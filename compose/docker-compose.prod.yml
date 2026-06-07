@@ -1,0 +1,81 @@
+# Stack PRODUCTION. Suit les tags git v* côté code (image :latest).
+#
+#   - tag d'image  : :latest (poussé par GitHub Actions lors d'un tag git v*)
+#   - DB           : volume + réseau internal ISOLÉS de la staging
+#   - pas de pgAdmin en prod (sécurité)
+#
+# Démarrage :
+#   docker compose -f compose/docker-compose.prod.yml --env-file compose/.env.prod up -d
+
+name: cesizen-prod
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cesizen-postgres-prod
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ghcr.io/nicolas-s-organization/cesizen-api:${API_TAG:-latest}
+    container_name: cesizen-api-prod
+    restart: unless-stopped
+    pull_policy: always
+    env_file: .env.prod
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [web, internal]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.api-prod.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api-prod.entrypoints=websecure"
+      - "traefik.http.routers.api-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-prod.priority=100"
+      - "traefik.http.routers.api-prod.middlewares=stripprefix-prod"
+      - "traefik.http.middlewares.stripprefix-prod.stripprefix.prefixes=/api"
+      - "traefik.http.services.api-prod.loadbalancer.server.port=3000"
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  web:
+    image: ghcr.io/nicolas-s-organization/cesizen-app-web:${WEB_TAG:-latest}
+    container_name: cesizen-web-prod
+    restart: unless-stopped
+    pull_policy: always
+    depends_on: [api]
+    networks: [web]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.web-prod.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.web-prod.entrypoints=websecure"
+      - "traefik.http.routers.web-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.web-prod.priority=1"
+      - "traefik.http.services.web-prod.loadbalancer.server.port=8080"
+      - "com.centurylinklabs.watchtower.enable=true"
+
+volumes:
+  postgres_data:
+
+networks:
+  web:
+    external: true
+  internal:
+    driver: bridge
+    internal: true

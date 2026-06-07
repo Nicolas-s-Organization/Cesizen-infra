@@ -1,0 +1,59 @@
+# Stack infrastructure — Traefik (reverse proxy + HTTPS) + Watchtower (pull-based deploy).
+# Démarrée UNE SEULE FOIS au bootstrap de la VM. Les stacks staging/prod s'y rattachent
+# via le réseau externe "web".
+#
+# Démarrage :
+#   docker network create web                                      # une seule fois
+#   docker compose -f traefik/docker-compose.yml --env-file traefik/.env up -d
+
+name: cesizen-infra
+
+services:
+
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik
+    restart: unless-stopped
+    networks: [web]
+    ports:
+      - "80:80"     # HTTP → redirigé vers HTTPS par Traefik
+      - "443:443"   # HTTPS (Let's Encrypt)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=web"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Redirection HTTP → HTTPS globale
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Let's Encrypt (challenge TLS-ALPN-01, OK pour plusieurs hosts sur le port 443)
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+      - "--accesslog=true"
+
+  # Watchtower scrute GHCR et met à jour les conteneurs labellisés "watchtower.enable=true"
+  # Ainsi pas besoin que CI ait un accès SSH à la VM (principe de moindre privilège).
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Credentials Docker pour pull les images GHCR privées
+      # (créés sur la VM par : docker login ghcr.io -u <user> -p <PAT>)
+      - /root/.docker/config.json:/config.json:ro
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"        # ne surveille QUE les services labellisés
+      WATCHTOWER_POLL_INTERVAL: 60           # poll GHCR toutes les 60 s
+      WATCHTOWER_CLEANUP: "true"             # supprime les vieilles images après update
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+
+networks:
+  web:
+    external: true
