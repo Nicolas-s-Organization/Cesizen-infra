@@ -11,7 +11,7 @@ name: cesizen-infra
 services:
 
   traefik:
-    image: traefik:v3.3
+    image: traefik:v3.5
     container_name: traefik
     restart: unless-stopped
     networks: [web]
