@@ -8,7 +8,7 @@ Infrastructure et déploiement du projet **CESIZen** sur VM Azure. Deux environn
 Internet ─HTTPS:443─> Traefik ┬─ Host(cesizen-staging.duckdns.org) ─┬─ /api/* → api-staging:3000
                               │                                    └─       → web-staging:8080
                               │
-                              ├─ Host(cesizen-prod.duckdns.org)    ─┬─ /api/* → api-prod:3000
+                              ├─ Host(cesizen-production.duckdns.org)    ─┬─ /api/* → api-prod:3000
                               │                                    └─       → web-prod:8080
                               │
                               └─ Host(cesizen-pgadmin.duckdns.org) ─→ pgadmin (staging uniquement)
@@ -44,7 +44,7 @@ Cesizen-infra/
 
 - Ubuntu 22.04 LTS ou +, Docker Engine + plugin Compose
 - Ports **80** et **443** ouverts (UFW *et* NSG Azure)
-- DuckDNS : 2 labels au minimum (`cesizen-staging`, `cesizen-prod`) + 1 optionnel (`cesizen-pgadmin`), tous pointant vers l'IP publique de la VM
+- DuckDNS : 2 labels au minimum (`cesizen-staging`, `cesizen-production`) + 1 optionnel (`cesizen-pgadmin`), tous pointant vers l'IP publique de la VM
 - PAT GitHub avec scope `read:packages` (pour pull les images GHCR privées)
 
 ## Bootstrap (premier déploiement sur la VM)
@@ -81,7 +81,7 @@ sudo docker compose -f traefik/docker-compose.yml logs -f traefik
 
 Une fois Traefik a obtenu les certs (~30-60 s pour chaque domaine), ouvre dans un navigateur :
 - `https://cesizen-staging.duckdns.org/login` → SPA staging
-- `https://cesizen-prod.duckdns.org/login` → SPA prod
+- `https://cesizen-production.duckdns.org/login` → SPA prod
 - `https://cesizen-pgadmin.duckdns.org/` → pgAdmin (si activé)
 
 ## Mises à jour
