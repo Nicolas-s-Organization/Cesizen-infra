@@ -21,6 +21,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt:/letsencrypt
+    environment:
+      # Le SDK Docker de Traefik hardcode l'API à 1.24, refusée par le daemon Docker 29+.
+      # On force une version moderne supportée par le daemon (≥ 1.40).
+      DOCKER_API_VERSION: "1.45"
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
