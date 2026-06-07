@@ -40,7 +40,7 @@ services:
   # Watchtower scrute GHCR et met à jour les conteneurs labellisés "watchtower.enable=true"
   # Ainsi pas besoin que CI ait un accès SSH à la VM (principe de moindre privilège).
   watchtower:
-    image: containrrr/watchtower
+    image: containrrr/watchtower:latest-dev
     container_name: watchtower
     restart: unless-stopped
     volumes:
