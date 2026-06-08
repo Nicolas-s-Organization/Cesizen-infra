@@ -11,7 +11,7 @@ name: cesizen-infra
 services:
 
   traefik:
-    image: traefik:latest
+    image: traefik:v3.7
     container_name: traefik
     restart: unless-stopped
     networks: [web]
@@ -40,7 +40,7 @@ services:
   # Watchtower scrute GHCR et met à jour les conteneurs labellisés "watchtower.enable=true"
   # Ainsi pas besoin que CI ait un accès SSH à la VM (principe de moindre privilège).
   watchtower:
-    image: containrrr/watchtower:latest-dev
+    image: containrrr/watchtower:latest
     container_name: watchtower
     restart: unless-stopped
     volumes:
