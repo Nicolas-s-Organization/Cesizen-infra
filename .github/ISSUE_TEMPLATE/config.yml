@@ -1,0 +1,2 @@
+# Force l'utilisation des templates : pas de "Open blank issue" autorisé.
+blank_issues_enabled: false
